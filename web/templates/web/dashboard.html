@@ -1,0 +1,249 @@
+{% extends 'web/base.html' %}
+
+{% block content %}
+<div class="mt-5">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card text-white mb-4" style="background-color: #3B4252;">
+                <div class="card-header">Uptime</div>
+                <div class="card-body">
+                    <h5 class="card-title" id="uptime">Loading...</h5>
+                </div>
+            </div>
+            <div class="card text-white mb-4" style="background-color: #3B4252;">
+                <div class="card-header">Commands Received</div>
+                <div class="card-body">
+                    <h5 class="card-title" id="commands_received">Loading...</h5>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="chart-container mb-4" style="border: 1px solid #4C566A; border-radius: 10px; padding: 10px; background-color: #3B4252; height: 300px;">
+                <canvas id="latencyChart" style="width: 100%;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="chart-container mb-4" style="border: 1px solid #4C566A; border-radius: 10px; padding: 10px; background-color: #3B4252; height: 300px;">
+                <canvas id="cpuUsageChart" style="width: 100%;"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container" style="border: 1px solid #4C566A; border-radius: 10px; padding: 10px; background-color: #3B4252; height: 300px;">
+                <canvas id="memoryUsageChart" style="width: 100%;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="console" style="border: 1px solid #4C566A; border-radius: 10px; padding: 10px; background-color: #3B4252; color: #FFFFFF; height: 400px; overflow-y: auto; font-family: 'Source Code Pro', monospace;">
+                <pre id="consoleOutput" style="color: #FFFFFF; white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const cpuCtx = document.getElementById('cpuUsageChart').getContext('2d');
+        const memoryCtx = document.getElementById('memoryUsageChart').getContext('2d');
+        const latencyCtx = document.getElementById('latencyChart').getContext('2d');
+
+        const chartOptions = {
+            type: 'line',
+            options: {
+                animation: {
+                    duration: 0
+                },
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second',
+                            displayFormats: {
+                                second: 'h:mm:ss a'
+                            }
+                        },
+                        ticks: {
+                            maxTicksLimit: 8,
+                            color: '#D8DEE9'
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#D8DEE9'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#D8DEE9'
+                        }
+                    }
+                }
+            }
+        };
+
+        const cpuUsageChart = new Chart(cpuCtx, {
+            ...chartOptions,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'CPU Usage (%)',
+                    data: [],
+                    backgroundColor: 'rgba(143, 188, 187, 0.2)',
+                    borderColor: '#88C0D0',
+                    borderWidth: 1,
+                    tension: 0.4,
+                    cubicInterpolationMode: 'monotone',
+                    pointRadius: 0
+                }]
+            }
+        });
+
+        const memoryUsageChart = new Chart(memoryCtx, {
+            ...chartOptions,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Memory Usage (MiB)',
+                    data: [],
+                    backgroundColor: 'rgba(191, 97, 106, 0.2)',
+                    borderColor: '#BF616A',
+                    borderWidth: 1,
+                    tension: 0.4,
+                    cubicInterpolationMode: 'monotone',
+                    pointRadius: 0
+                }]
+            }
+        });
+
+        const latencyChart = new Chart(latencyCtx, {
+            ...chartOptions,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Latency (ms)',
+                    data: [],
+                    backgroundColor: 'rgba(229, 192, 123, 0.2)',
+                    borderColor: '#EBCB8B',
+                    borderWidth: 1,
+                    tension: 0.4,
+                    cubicInterpolationMode: 'monotone',
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                ...chartOptions.options,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second',
+                            displayFormats: {
+                                second: 'h:mm:ss a'
+                            }
+                        },
+                        ticks: {
+                            maxTicksLimit: 8,
+                            color: '#D8DEE9'
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#D8DEE9'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            color: '#D8DEE9'
+                        }
+                    }
+                }
+            }
+        });
+
+        function updateCharts() {
+            console.log("Updating charts...");
+            $.ajax({
+                url: '{% url "get_latest_data" %}',
+                method: 'GET',
+                success: function(data) {
+                    console.log("Data received from server:", data);
+                    const now = new Date();
+
+                    document.getElementById('uptime').innerText = data.uptime;
+                    document.getElementById('commands_received').innerText = data.command_count;
+
+                    cpuUsageChart.data.labels.push(now);
+                    cpuUsageChart.data.datasets[0].data.push(data.cpu_usage);
+                    if (cpuUsageChart.data.labels.length > 20) {
+                        cpuUsageChart.data.labels.shift();
+                        cpuUsageChart.data.datasets[0].data.shift();
+                    }
+                    cpuUsageChart.update();
+
+                    memoryUsageChart.data.labels.push(now);
+                    memoryUsageChart.data.datasets[0].data.push(data.memory_usage);
+                    if (memoryUsageChart.data.labels.length > 20) {
+                        memoryUsageChart.data.labels.shift();
+                        memoryUsageChart.data.datasets[0].data.shift();
+                    }
+                    memoryUsageChart.update();
+
+                    latencyChart.data.labels.push(now);
+                    latencyChart.data.datasets[0].data.push(data.latency);
+                    if (latencyChart.data.labels.length > 20) {
+                        latencyChart.data.labels.shift();
+                        latencyChart.data.datasets[0].data.shift();
+                    }
+                    latencyChart.update();
+                },
+                error: function(error) {
+                    console.error("Error fetching data:", error);
+                }
+            });
+        }
+
+        function updateConsole() {
+            console.log("Updating console...");
+            $.ajax({
+                url: '{% url "get_latest_logs" %}',
+                method: 'GET',
+                success: function(data) {
+                    console.log("Logs received from server:", data);
+                    const consoleOutput = document.getElementById('consoleOutput');
+                    const isScrolledToBottom = consoleOutput.scrollHeight - consoleOutput.clientHeight <= consoleOutput.scrollTop + 1;
+
+                    consoleOutput.innerHTML = '';
+                    data.slice(-100).reverse().forEach(log => {
+                        const logEntry = document.createElement('div');
+                        logEntry.style.color = '#FFFFFF';
+                        logEntry.textContent = `[${log.timestamp}] ${log.log}`;
+                        consoleOutput.appendChild(logEntry);
+                    });
+
+                    if (isScrolledToBottom) {
+                        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                    }
+                },
+                error: function(error) {
+                    console.error("Error fetching logs:", error);
+                }
+            });
+        }
+
+        setInterval(updateCharts, 1000);
+        setInterval(updateConsole, 1000);
+    });
+</script>
+{% endblock %}
